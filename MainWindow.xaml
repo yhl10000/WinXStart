@@ -1,0 +1,284 @@
+<Window x:Class="WinXStart.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WinXStart.ViewModels"
+        xmlns:models="clr-namespace:WinXStart.Models"
+        xmlns:conv="clr-namespace:WinXStart.Converters"
+        xmlns:system="clr-namespace:System;assembly=mscorlib"
+        Title="WinX Start"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        ResizeMode="NoResize"
+        Width="1000" Height="700"
+        Deactivated="Window_Deactivated"
+        KeyDown="Window_KeyDown"
+        Loaded="Window_Loaded">
+
+    <Window.Resources>
+        <conv:AppIconConverter x:Key="AppIconConverter"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <system:Double x:Key="TileFontSize">12</system:Double>
+        <system:Double x:Key="GroupFontSize">13</system:Double>
+    </Window.Resources>
+
+    <Border x:Name="RootBorder" CornerRadius="8"
+            BorderThickness="1" BorderBrush="#66FFFFFF"
+            Background="Transparent"
+            AllowDrop="True" PreviewDragOver="RootBorder_PreviewDragOver">
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Search Bar -->
+            <Border Grid.Row="0" Padding="16,14,16,8">
+                <TextBox x:Name="SearchBox"
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource SearchBoxStyle}"/>
+            </Border>
+
+            <!-- Content Area -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="1"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- All Apps List -->
+                <ListBox x:Name="AppList"
+                         Grid.Column="0"
+                         ItemsSource="{Binding FilteredApps}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="4,0"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ItemContainerStyle="{StaticResource AppListItemStyle}"
+                         MouseDoubleClick="AppList_MouseDoubleClick">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:AppInfo}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="32"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Image Grid.Column="0"
+                                       Source="{Binding Converter={StaticResource AppIconConverter}}"
+                                       Width="24" Height="24"
+                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                       Margin="0,0,8,0"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{Binding Name}"
+                                           Foreground="White"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"/>
+                                <Grid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="Pin to Start" Click="PinApp_Click"/>
+                                        <Separator/>
+                                        <MenuItem Header="Open file location" Click="OpenLocation_Click"/>
+                                    </ContextMenu>
+                                </Grid.ContextMenu>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Separator -->
+                <Rectangle x:Name="Separator" Grid.Column="1" Fill="#44FFFFFF" Width="1"/>
+
+                <!-- Pinned Tiles Area -->
+                <Grid Grid.Column="2" Margin="12,4,8,0">
+                    <Grid.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="📁 Pin from file..." Click="PinFromFile_Click"/>
+                        </ContextMenu>
+                    </Grid.ContextMenu>
+                    <!-- Empty state placeholder -->
+                    <TextBlock x:Name="EmptyPlaceholder"
+                               Style="{StaticResource EmptyPlaceholderStyle}"
+                               Text="No pinned apps yet.&#x0a;&#x0a;Right-click an app on the left&#x0a;and select 'Pin to Start'."/>
+
+                    <!-- Groups + Tiles -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel>
+                            <!-- One block per group -->
+                            <ItemsControl x:Name="GroupsControl"
+                                          ItemsSource="{Binding TileGroups}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:TileGroupViewModel}">
+                                        <StackPanel Margin="0,0,0,12">
+
+                                            <!-- Group header -->
+                                            <Grid Margin="2,0,2,4" Height="24">
+                                                <!-- Display mode: click to start rename -->
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="#B0B0B0"
+                                                           FontSize="{DynamicResource GroupFontSize}"
+                                                           FontFamily="Segoe UI"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"
+                                                           Cursor="IBeam"
+                                                           MouseDown="GroupName_MouseDown">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEditingName}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                    <TextBlock.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="Rename group" Click="RenameGroup_Click"/>
+                                                            <MenuItem Header="Delete group" Click="DeleteGroup_Click"/>
+                                                        </ContextMenu>
+                                                    </TextBlock.ContextMenu>
+                                                </TextBlock>
+
+                                                <!-- Edit mode -->
+                                                <TextBox x:Name="GroupNameEdit"
+                                                         Text="{Binding Name, UpdateSourceTrigger=Explicit}"
+                                                         Background="#333"
+                                                         Foreground="White"
+                                                         BorderBrush="#0078D4"
+                                                         BorderThickness="0,0,0,1"
+                                                         FontSize="{DynamicResource GroupFontSize}"
+                                                         FontFamily="Segoe UI"
+                                                         VerticalAlignment="Center"
+                                                         IsVisibleChanged="GroupNameEdit_IsVisibleChanged"
+                                                         KeyDown="GroupNameEdit_KeyDown"
+                                                         LostFocus="GroupNameEdit_LostFocus">
+                                                    <TextBox.Style>
+                                                        <Style TargetType="TextBox">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsEditingName}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBox.Style>
+                                                </TextBox>
+                                            </Grid>
+
+                                            <!-- Tiles in this group -->
+                                            <ItemsControl ItemsSource="{Binding Tiles}"
+                                                          AllowDrop="True"
+                                                          PreviewMouseLeftButtonDown="GroupTiles_PreviewMouseLeftButtonDown"
+                                                          PreviewMouseMove="GroupTiles_PreviewMouseMove"
+                                                          Drop="GroupTiles_Drop"
+                                                          DragOver="GroupTiles_DragOver">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <WrapPanel Orientation="Horizontal"/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate DataType="{x:Type vm:TileViewModel}">
+                                                        <Button Width="{Binding TileWidth}"
+                                                                Height="{Binding TileHeight}"
+                                                                Background="{Binding TileColor}"
+                                                                Style="{StaticResource TileButtonStyle}"
+                                                                Command="{Binding DataContext.LaunchTileCommand,
+                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}">
+                                                            <StackPanel HorizontalAlignment="Center"
+                                                                        VerticalAlignment="Center">
+                                                                <Image Source="{Binding Icon}"
+                                                                       Width="{Binding IconSize}"
+                                                                       Height="{Binding IconSize}"
+                                                                       RenderOptions.BitmapScalingMode="HighQuality"
+                                                                       HorizontalAlignment="Center"/>
+                                                                 <TextBlock Text="{Binding Name}"
+                                                                            Foreground="White"
+                                                                            FontSize="{DynamicResource TileFontSize}"
+                                                                            FontFamily="Segoe UI"
+                                                                            TextWrapping="Wrap"
+                                                                            TextAlignment="Center"
+                                                                            HorizontalAlignment="Center"
+                                                                            Margin="2,3,2,0"
+                                                                            MaxHeight="40"
+                                                                            MaxWidth="{Binding TileWidth}"/>
+                                                            </StackPanel>
+
+                                                            <Button.ContextMenu>
+                                                                <ContextMenu Opened="TileContextMenu_Opened"
+                                                                             Tag="{Binding}">
+                                                                    <MenuItem Header="Unpin from Start"
+                                                                              Click="UnpinTile_Click"/>
+                                                                    <Separator/>
+                                                                    <MenuItem Header="Resize">
+                                                                        <MenuItem Header="Small"  Command="{Binding ResizeSmallCommand}"/>
+                                                                        <MenuItem Header="Medium" Command="{Binding ResizeMediumCommand}"/>
+                                                                        <MenuItem Header="Large"  Command="{Binding ResizeLargeCommand}"/>
+                                                                    </MenuItem>
+                                                                    <MenuItem x:Name="MoveToMenuItem" Header="Move to group"/>
+                                                                </ContextMenu>
+                                                            </Button.ContextMenu>
+                                                        </Button>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Add new group button -->
+                            <Button Content="+ New Group"
+                                    HorizontalAlignment="Left"
+                                    Margin="4,4,0,8"
+                                    Padding="8,4"
+                                    Background="Transparent"
+                                    Foreground="#666"
+                                    BorderThickness="1"
+                                    BorderBrush="#444"
+                                    Cursor="Hand"
+                                    FontSize="{DynamicResource GroupFontSize}"
+                                    FontFamily="Segoe UI"
+                                    Command="{Binding CreateGroupCommand}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Grid>
+
+            <!-- Bottom Bar -->
+            <Border x:Name="BottomBar" Grid.Row="2" Background="#33000000"
+                    Padding="16,8" CornerRadius="0,0,8,8">
+                <DockPanel>
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                        <Ellipse Width="28" Height="28"
+                                 Fill="{StaticResource AccentBrush}" Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding UserName}"
+                                   Foreground="White" FontSize="13"
+                                   FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal"
+                                DockPanel.Dock="Right"
+                                HorizontalAlignment="Right">
+                        <Button Content="＋" FontSize="16" ToolTip="Pin app from file"
+                                Background="Transparent" Foreground="#999"
+                                BorderThickness="0" Padding="8,4"
+                                Cursor="Hand" Click="PinFromFile_Click"/>
+                        <Button Content="⏻" FontSize="16"
+                                Background="Transparent" Foreground="#999"
+                                BorderThickness="0" Padding="8,4"
+                                Cursor="Hand" Click="Power_Click"/>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Border>
+</Window>
