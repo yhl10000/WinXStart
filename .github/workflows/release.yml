@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Get version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = $tag -replace '^v', ''
+          echo "TAG=$tag" >> $env:GITHUB_OUTPUT
+          echo "VER=$ver" >> $env:GITHUB_OUTPUT
+
+      # ── Self-contained (single-file, trimmed) ──
+      - name: Publish self-contained
+        run: >
+          dotnet publish -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish/self-contained
+
+      - name: Package self-contained
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish/self-contained/* -DestinationPath "WinXStart-${{ steps.version.outputs.VER }}-win-x64-self-contained.zip"
+
+      # ── Framework-dependent ──
+      - name: Publish framework-dependent
+        run: >
+          dotnet publish -c Release
+          -r win-x64
+          --self-contained false
+          -o publish/framework-dependent
+
+      - name: Package framework-dependent
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish/framework-dependent/* -DestinationPath "WinXStart-${{ steps.version.outputs.VER }}-win-x64-framework-dependent.zip"
+
+      # ── Create GitHub Release ──
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create ${{ steps.version.outputs.TAG }}
+          "WinXStart-${{ steps.version.outputs.VER }}-win-x64-self-contained.zip#WinXStart (Self-contained, no .NET required)"
+          "WinXStart-${{ steps.version.outputs.VER }}-win-x64-framework-dependent.zip#WinXStart (Framework-dependent, requires .NET 10)"
+          --title "WinXStart ${{ steps.version.outputs.TAG }}"
+          --generate-notes
