@@ -76,6 +76,7 @@
                                        Margin="0,0,8,0"/>
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding Name}"
+                                           ToolTip="{Binding Name}"
                                            Foreground="White"
                                            VerticalAlignment="Center"
                                            TextTrimming="CharacterEllipsis"/>
