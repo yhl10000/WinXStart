@@ -63,7 +63,7 @@ public partial class App : Application
     {
         _trayIcon = new WinForms.NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = LoadAppIcon(),
             Text = "WinX Start - Win+Alt+Z to open",
             Visible = true
         };
@@ -154,6 +154,15 @@ public partial class App : Application
                 UseShellExecute = true
             });
         }
+    }
+
+    private static Icon LoadAppIcon()
+    {
+        var exeDir = AppContext.BaseDirectory;
+        var icoPath = System.IO.Path.Combine(exeDir, "assets", "app.ico");
+        if (System.IO.File.Exists(icoPath))
+            return new Icon(icoPath);
+        return SystemIcons.Application;
     }
 
     protected override void OnExit(ExitEventArgs e)
