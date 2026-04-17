@@ -161,11 +161,6 @@ public partial class MainWindow : Window
         if (e.Key == Key.Escape) { HideMenu(); e.Handled = true; }
     }
 
-    private void Window_Loaded(object sender, RoutedEventArgs e)
-    {
-        HideMenu();
-    }
-
     private void AppList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (AppList.SelectedItem is AppInfo app)
@@ -200,6 +195,32 @@ public partial class MainWindow : Window
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result == MessageBoxResult.Yes)
             Application.Current.Shutdown();
+    }
+
+    private void About_Click(object sender, RoutedEventArgs e)
+    {
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        var ver = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+
+        var result = MessageBox.Show(
+            $"WinXStart  v{ver}\n\n" +
+            "A lightweight Windows 10-style Start Menu.\n\n" +
+            "Author:  yhl10000\n" +
+            "Email:   yhl10000@gmail.com\n" +
+            "GitHub:  github.com/yhl10000/WinXStart\n\n" +
+            "Click OK to open the GitHub page.",
+            "About WinXStart",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Information);
+
+        if (result == MessageBoxResult.OK)
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://github.com/yhl10000/WinXStart",
+                UseShellExecute = true
+            });
+        }
     }
 
     private void PinFromFile_Click(object sender, RoutedEventArgs e)

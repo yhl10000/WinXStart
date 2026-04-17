@@ -14,8 +14,7 @@
         ResizeMode="NoResize"
         Width="1000" Height="700"
         Deactivated="Window_Deactivated"
-        KeyDown="Window_KeyDown"
-        Loaded="Window_Loaded">
+        KeyDown="Window_KeyDown">
 
     <Window.Resources>
         <conv:AppIconConverter x:Key="AppIconConverter"/>
@@ -259,8 +258,31 @@
                     Padding="16,8" CornerRadius="0,0,8,8">
                 <DockPanel>
                     <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
-                        <Ellipse Width="28" Height="28"
-                                 Fill="{StaticResource AccentBrush}" Margin="0,0,10,0"/>
+                        <Grid Width="28" Height="28" Margin="0,0,10,0">
+                            <!-- Fallback: accent circle + initial letter -->
+                            <Ellipse Fill="{StaticResource AccentBrush}"/>
+                            <TextBlock Text="{Binding UserInitial}"
+                                       Foreground="White" FontSize="13"
+                                       FontFamily="Segoe UI" FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                            <!-- Avatar image overlay (covers fallback when present) -->
+                            <Ellipse>
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding UserAvatar}" Value="{x:Null}">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                                <Ellipse.Fill>
+                                    <ImageBrush ImageSource="{Binding UserAvatar}" Stretch="UniformToFill"/>
+                                </Ellipse.Fill>
+                            </Ellipse>
+                        </Grid>
                         <TextBlock Text="{Binding UserName}"
                                    Foreground="White" FontSize="13"
                                    FontFamily="Segoe UI" VerticalAlignment="Center"/>
@@ -272,6 +294,10 @@
                                 Background="Transparent" Foreground="#999"
                                 BorderThickness="0" Padding="8,4"
                                 Cursor="Hand" Click="PinFromFile_Click"/>
+                        <Button Content="ℹ" FontSize="15" ToolTip="About WinXStart"
+                                Background="Transparent" Foreground="#999"
+                                BorderThickness="0" Padding="8,4"
+                                Cursor="Hand" Click="About_Click"/>
                         <Button Content="⏻" FontSize="16"
                                 Background="Transparent" Foreground="#999"
                                 BorderThickness="0" Padding="8,4"

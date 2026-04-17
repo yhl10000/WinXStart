@@ -1,9 +1,13 @@
+using System.Text;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using WinXStart.Models;
 using WinXStart.Services;
 
@@ -20,7 +24,54 @@ public class MainViewModel : ViewModelBase
 
     public ObservableCollection<AppInfo> FilteredApps { get; } = new();
     public ObservableCollection<TileGroupViewModel> TileGroups { get; } = new();
-    public string UserName { get; } = Environment.UserName;
+    private static readonly string _displayName = GetDisplayName();
+    public string UserName { get; } = _displayName;
+    public string UserInitial { get; } = _displayName.Length > 0
+        ? _displayName[..1].ToUpperInvariant() : "?";
+    public ImageSource? UserAvatar { get; } = LoadUserAvatar();
+
+    private static string GetDisplayName()
+    {
+        try
+        {
+            int size = 256;
+            var buf = new StringBuilder(size);
+            if (Interop.NativeMethods.GetUserNameExW(Interop.NativeMethods.NameDisplay, buf, ref size) && buf.Length > 0)
+                return buf.ToString();
+        }
+        catch { }
+        return Environment.UserName;
+    }
+
+    private static ImageSource? LoadUserAvatar()
+    {
+        try
+        {
+            var sid = WindowsIdentity.GetCurrent().User?.Value;
+            if (sid == null) return null;
+
+            using var key = Registry.LocalMachine.OpenSubKey(
+                $@"SOFTWARE\Microsoft\Windows\CurrentVersion\AccountPicture\Users\{sid}");
+            if (key == null) return null;
+
+            foreach (var name in new[] { "Image192", "Image96", "Image64", "Image48", "Image240" })
+            {
+                if (key.GetValue(name) is string path && File.Exists(path))
+                {
+                    var bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.UriSource = new Uri(path, UriKind.Absolute);
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.DecodePixelWidth = 56;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    return bmp;
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
 
     public string SearchText
     {

@@ -46,7 +46,6 @@ public partial class App : Application
             Dispatcher.Invoke(() => _mainWindow.ShowMenu());
         };
         _hotkeyManager.Register();
-        _mainWindow.Loaded += (_, _) => { /* HWND no longer needed for hotkey */ };
 
         // Setup system tray icon
         SetupTrayIcon();
