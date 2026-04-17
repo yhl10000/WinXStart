@@ -153,11 +153,19 @@ public class AppScanner
                 if (!string.IsNullOrEmpty(logoAttr))
                     iconPath = FindScaledAsset(installPath, logoAttr);
 
+                // Medium (150x150) and Wide (310x150) logos — used as tile background fill
+                var mediumLogoAttr = visual?.Attribute("Square150x150Logo")?.Value ?? "";
+                var wideLogoAttr = visual?.Attribute("Wide310x150Logo")?.Value ?? "";
+                var mediumLogoPath = string.IsNullOrEmpty(mediumLogoAttr) ? "" : FindLargeAsset(installPath, mediumLogoAttr);
+                var wideLogoPath = string.IsNullOrEmpty(wideLogoAttr) ? "" : FindLargeAsset(installPath, wideLogoAttr);
+
                 results.Add(new AppInfo
                 {
                     Name = displayName,
                     AppUserModelId = aumid,
                     IconImagePath = iconPath,
+                    MediumLogoPath = mediumLogoPath,
+                    WideLogoPath = wideLogoPath,
                     Category = "Store Apps"
                 });
             }
@@ -231,6 +239,44 @@ public class AppScanner
         try
         {
             var match = Directory.EnumerateFiles(dir, baseName + "*" + ext)
+                .FirstOrDefault();
+            if (match != null) return match;
+        }
+        catch { }
+
+        return "";
+    }
+
+    /// <summary>
+    /// Finds the best large-scale asset for tile backgrounds (prefer scale-400/200 for crisp rendering).
+    /// </summary>
+    private static string FindLargeAsset(string installPath, string relativeLogo)
+    {
+        var dir = Path.Combine(installPath, Path.GetDirectoryName(relativeLogo) ?? "");
+        var baseName = Path.GetFileNameWithoutExtension(relativeLogo);
+        var ext = Path.GetExtension(relativeLogo);
+
+        if (!Directory.Exists(dir)) return "";
+
+        // Prefer larger scales for tile backgrounds
+        var suffixes = new[]
+        {
+            ".scale-200", ".scale-400", ".scale-150", ".scale-125", ".scale-100",
+            ""  // exact name
+        };
+
+        foreach (var suffix in suffixes)
+        {
+            var candidate = Path.Combine(dir, baseName + suffix + ext);
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        // Fallback: any file matching base name, but skip "contrast" / "altform" variants
+        try
+        {
+            var match = Directory.EnumerateFiles(dir, baseName + "*" + ext)
+                .Where(f => !f.Contains("contrast", StringComparison.OrdinalIgnoreCase))
+                .Where(f => !f.Contains("altform", StringComparison.OrdinalIgnoreCase))
                 .FirstOrDefault();
             if (match != null) return match;
         }

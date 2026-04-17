@@ -17,6 +17,12 @@ public class AppInfo
     /// <summary>Direct path to a PNG/JPG icon file (used by Store apps).</summary>
     public string IconImagePath { get; set; } = "";
 
+    /// <summary>Medium tile background image (Square150x150Logo) — used to fill Medium/Large tiles.</summary>
+    public string MediumLogoPath { get; set; } = "";
+
+    /// <summary>Wide tile background image (Wide310x150Logo) — used to fill Wide tiles.</summary>
+    public string WideLogoPath { get; set; } = "";
+
     public bool IsStoreApp => !string.IsNullOrEmpty(AppUserModelId);
 
     public string Id

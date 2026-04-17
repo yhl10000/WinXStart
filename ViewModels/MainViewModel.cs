@@ -91,6 +91,8 @@ public class MainViewModel : ViewModelBase
 
     public event Action? RequestHide;
 
+    public TileDropHandler TileDropHandler { get; }
+
     public MainViewModel(AppScanner scanner, IconExtractor iconExtractor, PinManager pinManager)
     {
         _scanner = scanner;
@@ -102,6 +104,8 @@ public class MainViewModel : ViewModelBase
         PinCommand = new RelayCommand(OnPin);
         UnpinCommand = new RelayCommand(OnUnpin);
         CreateGroupCommand = new RelayCommand(OnCreateGroup);
+
+        TileDropHandler = new TileDropHandler(this);
 
         LoadApps();
     }
@@ -176,6 +180,28 @@ public class MainViewModel : ViewModelBase
     {
         _pinManager.MoveToGroup(tile.AppId, targetGroupVm.Name);
         RefreshTileGroups();
+    }
+
+    /// <summary>
+    /// Cross-group move with live ObservableCollection mutation (no full refresh,
+    /// so WPF animations on the item containers remain smooth). Persists via PinManager.
+    /// </summary>
+    public void MoveTileToGroupAt(TileViewModel tile, TileGroupViewModel sourceGroupVm,
+                                   TileGroupViewModel targetGroupVm, int insertIndex)
+    {
+        if (ReferenceEquals(sourceGroupVm, targetGroupVm)) return;
+
+        int fromIdx = sourceGroupVm.Tiles.IndexOf(tile);
+        if (fromIdx < 0) return;
+
+        if (insertIndex < 0 || insertIndex > targetGroupVm.Tiles.Count)
+            insertIndex = targetGroupVm.Tiles.Count;
+
+        sourceGroupVm.Tiles.RemoveAt(fromIdx);
+        targetGroupVm.Tiles.Insert(insertIndex, tile);
+
+        _pinManager.MoveToGroup(tile.AppId, targetGroupVm.Name, insertIndex);
+        OnPropertyChanged(nameof(HasAnyTiles));
     }
 
     public void MoveTileToNewGroup(TileViewModel tile, string newGroupName)

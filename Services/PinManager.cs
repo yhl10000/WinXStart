@@ -170,7 +170,7 @@ public class PinManager
         Save();
     }
 
-    public void MoveToGroup(string appId, string targetGroupName)
+    public void MoveToGroup(string appId, string targetGroupName, int insertIndex = -1)
     {
         PinnedTile? tile = null;
         string? sourceGroupName = null;
@@ -189,8 +189,14 @@ public class PinManager
             target = new TileGroup { Name = targetGroupName };
             _config.Groups.Add(target);
         }
-        tile.Order = target.Tiles.Count;
-        target.Tiles.Add(tile);
+        if (insertIndex >= 0 && insertIndex <= target.Tiles.Count)
+            target.Tiles.Insert(insertIndex, tile);
+        else
+            target.Tiles.Add(tile);
+
+        // Rebuild Order to match list position
+        for (int i = 0; i < target.Tiles.Count; i++)
+            target.Tiles[i].Order = i;
 
         // Only remove the SOURCE group if it became empty (not all empty groups)
         if (sourceGroupName != null &&

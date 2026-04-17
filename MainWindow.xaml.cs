@@ -3,7 +3,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Documents;
 using System.Windows.Media;
 using WinXStart.Interop;
 using WinXStart.Models;
@@ -15,15 +14,6 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
     private readonly AppSettings _settings;
-
-    // Drag state
-    private Point _dragStartPoint;
-    private TileViewModel? _draggedTile;
-    private TileGroupViewModel? _dragSourceGroup;
-    private ItemsControl? _dragSourceItemsControl;
-    private DragAdorner? _dragAdorner;
-    private AdornerLayer? _adornerLayer;
-    private FrameworkElement? _dragSourceElement;
 
     public MainWindow(MainViewModel viewModel, AppSettings settings)
     {
@@ -390,148 +380,5 @@ public partial class MainWindow : Window
         dlg.Content = sp;
         dlg.Loaded += (_, _) => { tb.Focus(); };
         return dlg.ShowDialog() == true ? tb.Text.Trim() : null;
-    }
-
-    // ── Drag-and-drop tile reordering ─────────────────────────
-
-    private void GroupTiles_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not ItemsControl ic) return;
-        _dragSourceItemsControl = ic;
-        _dragStartPoint = e.GetPosition(ic);
-        _draggedTile = FindTileFromHit(e.OriginalSource as DependencyObject);
-        _dragSourceGroup = ic.DataContext as TileGroupViewModel;
-    }
-
-    private void GroupTiles_PreviewMouseMove(object sender, MouseEventArgs e)
-    {
-        if (e.LeftButton != MouseButtonState.Pressed || _draggedTile == null ||
-            _dragSourceItemsControl == null) return;
-
-        var pos = e.GetPosition(_dragSourceItemsControl);
-        if (Math.Abs(pos.X - _dragStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance ||
-            Math.Abs(pos.Y - _dragStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance)
-        {
-            CreateDragAdorner(e);
-            var data = new DataObject("WinXStartTileDrag", true);
-            DragDrop.DoDragDrop(_dragSourceItemsControl, data, DragDropEffects.Move);
-            RemoveDragAdorner();
-            _draggedTile = null;
-            _dragSourceGroup = null;
-            _dragSourceItemsControl = null;
-        }
-    }
-
-    private void GroupTiles_DragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = e.Data.GetDataPresent("WinXStartTileDrag")
-            ? DragDropEffects.Move : DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    private void RootBorder_PreviewDragOver(object sender, DragEventArgs e)
-    {
-        if (_dragAdorner != null)
-        {
-            var pos = e.GetPosition(RootBorder);
-            _dragAdorner.SetPosition(pos.X, pos.Y);
-        }
-    }
-
-    private void GroupTiles_Drop(object sender, DragEventArgs e)
-    {
-        if (_draggedTile == null || !e.Data.GetDataPresent("WinXStartTileDrag")) return;
-
-        var targetIc = sender as ItemsControl;
-        var targetGroup = targetIc?.DataContext as TileGroupViewModel;
-
-        var target = FindTileFromHit(e.OriginalSource as DependencyObject);
-
-        if (targetGroup != null && _dragSourceGroup != null && targetGroup != _dragSourceGroup)
-        {
-            // Cross-group move
-            _viewModel.MoveTileToGroup(_draggedTile, targetGroup);
-        }
-        else if (target != null && target != _draggedTile && _dragSourceGroup != null)
-        {
-            // Same-group reorder
-            var ic = _dragSourceItemsControl!;
-            var from = _dragSourceGroup.Tiles.IndexOf(_draggedTile);
-            var to   = _dragSourceGroup.Tiles.IndexOf(target);
-            if (from >= 0 && to >= 0)
-                _viewModel.MoveTileInGroup(_dragSourceGroup, from, to);
-        }
-
-        _draggedTile = null;
-        e.Handled = true;
-    }
-
-    // ── Adorner helpers ───────────────────────────────────────
-
-    private void CreateDragAdorner(MouseEventArgs e)
-    {
-        var tileButton = FindTileContainer(_draggedTile!, _dragSourceItemsControl!);
-        if (tileButton == null) return;
-
-        _adornerLayer = AdornerLayer.GetAdornerLayer(RootBorder);
-        if (_adornerLayer == null) return;
-
-        var mouseInTile = e.GetPosition(tileButton);
-        var mouseInRoot = e.GetPosition(RootBorder);
-
-        _dragAdorner = new DragAdorner(RootBorder, tileButton, mouseInTile.X, mouseInTile.Y);
-        _adornerLayer.Add(_dragAdorner);
-        _dragAdorner.SetPosition(mouseInRoot.X, mouseInRoot.Y);
-
-        _dragSourceElement = tileButton;
-        _dragSourceElement.Opacity = 0.3;
-    }
-
-    private void RemoveDragAdorner()
-    {
-        if (_dragAdorner != null && _adornerLayer != null)
-        {
-            _adornerLayer.Remove(_dragAdorner);
-            _dragAdorner = null;
-            _adornerLayer = null;
-        }
-        if (_dragSourceElement != null)
-        {
-            _dragSourceElement.Opacity = 1.0;
-            _dragSourceElement = null;
-        }
-    }
-
-    // ── Visual tree helpers ───────────────────────────────────
-
-    private static FrameworkElement? FindTileContainer(TileViewModel tile, ItemsControl ic)
-    {
-        var container = ic.ItemContainerGenerator.ContainerFromItem(tile);
-        if (container is DependencyObject depObj)
-            return FindVisualChild<System.Windows.Controls.Button>(depObj);
-        return null;
-    }
-
-    private static TileViewModel? FindTileFromHit(DependencyObject? source)
-    {
-        while (source != null)
-        {
-            if (source is FrameworkElement fe && fe.DataContext is TileViewModel tile)
-                return tile;
-            source = VisualTreeHelper.GetParent(source);
-        }
-        return null;
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-    {
-        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-        {
-            var child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T result) return result;
-            var found = FindVisualChild<T>(child);
-            if (found != null) return found;
-        }
-        return null;
     }
 }

@@ -5,6 +5,7 @@
         xmlns:models="clr-namespace:WinXStart.Models"
         xmlns:conv="clr-namespace:WinXStart.Converters"
         xmlns:system="clr-namespace:System;assembly=mscorlib"
+        xmlns:dd="urn:gong-wpf-dragdrop"
         Title="WinX Start"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -25,8 +26,7 @@
 
     <Border x:Name="RootBorder" CornerRadius="8"
             BorderThickness="1" BorderBrush="#66FFFFFF"
-            Background="Transparent"
-            AllowDrop="True" PreviewDragOver="RootBorder_PreviewDragOver">
+            Background="Transparent">
 
         <Grid>
             <Grid.RowDefinitions>
@@ -116,7 +116,8 @@
                                           ItemsSource="{Binding TileGroups}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate DataType="{x:Type vm:TileGroupViewModel}">
-                                        <StackPanel Margin="0,0,0,12">
+                                        <StackPanel Margin="0,0,0,12"
+                                                    Tag="{Binding}">
 
                                             <!-- Group header -->
                                             <Grid Margin="2,0,2,4" Height="24">
@@ -174,11 +175,13 @@
 
                                             <!-- Tiles in this group -->
                                             <ItemsControl ItemsSource="{Binding Tiles}"
-                                                          AllowDrop="True"
-                                                          PreviewMouseLeftButtonDown="GroupTiles_PreviewMouseLeftButtonDown"
-                                                          PreviewMouseMove="GroupTiles_PreviewMouseMove"
-                                                          Drop="GroupTiles_Drop"
-                                                          DragOver="GroupTiles_DragOver">
+                                                          MinHeight="40"
+                                                          dd:DragDrop.IsDragSource="True"
+                                                          dd:DragDrop.IsDropTarget="True"
+                                                          dd:DragDrop.UseDefaultDragAdorner="True"
+                                                          dd:DragDrop.DefaultDragAdornerOpacity="0.7"
+                                                          dd:DragDrop.ShowAlwaysDropTargetAdorner="True"
+                                                          dd:DragDrop.DropHandler="{Binding DataContext.TileDropHandler, RelativeSource={RelativeSource AncestorType=Window}}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
                                                         <WrapPanel Orientation="Horizontal"/>
@@ -193,24 +196,55 @@
                                                                 Command="{Binding DataContext.LaunchTileCommand,
                                                                     RelativeSource={RelativeSource AncestorType=Window}}"
                                                                 CommandParameter="{Binding}">
-                                                            <StackPanel HorizontalAlignment="Center"
-                                                                        VerticalAlignment="Center">
-                                                                <Image Source="{Binding Icon}"
-                                                                       Width="{Binding IconSize}"
-                                                                       Height="{Binding IconSize}"
+                                                            <Grid ClipToBounds="True">
+                                                                <!-- Full-bleed background image (Store apps with wide/medium logos) -->
+                                                                <Image Source="{Binding BackgroundImage}"
+                                                                       Stretch="UniformToFill"
                                                                        RenderOptions.BitmapScalingMode="HighQuality"
-                                                                       HorizontalAlignment="Center"/>
-                                                                 <TextBlock Text="{Binding Name}"
-                                                                            Foreground="White"
-                                                                            FontSize="{DynamicResource TileFontSize}"
-                                                                            FontFamily="Segoe UI"
-                                                                            TextWrapping="Wrap"
-                                                                            TextAlignment="Center"
-                                                                            HorizontalAlignment="Center"
-                                                                            Margin="2,3,2,0"
-                                                                            MaxHeight="40"
-                                                                            MaxWidth="{Binding TileWidth}"/>
-                                                            </StackPanel>
+                                                                       Visibility="{Binding HasBackgroundImage, Converter={StaticResource BoolToVis}}"/>
+
+                                                                <!-- Bottom caption overlay (only when background image is present) -->
+                                                                <Border VerticalAlignment="Bottom"
+                                                                        Background="#99000000"
+                                                                        Padding="6,2"
+                                                                        Visibility="{Binding HasBackgroundImage, Converter={StaticResource BoolToVis}}">
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               Foreground="White"
+                                                                               FontSize="{DynamicResource TileFontSize}"
+                                                                               FontFamily="Segoe UI"
+                                                                               TextTrimming="CharacterEllipsis"/>
+                                                                </Border>
+
+                                                                <!-- Default centered icon + text (no background image) -->
+                                                                <StackPanel HorizontalAlignment="Center"
+                                                                            VerticalAlignment="Center">
+                                                                    <StackPanel.Style>
+                                                                        <Style TargetType="StackPanel">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding HasBackgroundImage}" Value="True">
+                                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </StackPanel.Style>
+                                                                    <Image Source="{Binding Icon}"
+                                                                           Width="{Binding IconSize}"
+                                                                           Height="{Binding IconSize}"
+                                                                           RenderOptions.BitmapScalingMode="HighQuality"
+                                                                           HorizontalAlignment="Center"/>
+                                                                    <TextBlock Text="{Binding Name}"
+                                                                               Foreground="White"
+                                                                               FontSize="{DynamicResource TileFontSize}"
+                                                                               FontFamily="Segoe UI"
+                                                                               TextWrapping="Wrap"
+                                                                               TextAlignment="Center"
+                                                                               HorizontalAlignment="Center"
+                                                                               Margin="2,3,2,0"
+                                                                               MaxHeight="40"
+                                                                               MaxWidth="{Binding TileWidth}"/>
+                                                                </StackPanel>
+                                                            </Grid>
 
                                                             <Button.ContextMenu>
                                                                 <ContextMenu Opened="TileContextMenu_Opened"

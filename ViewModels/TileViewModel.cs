@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using WinXStart.Models;
@@ -14,6 +15,37 @@ public class TileViewModel : ViewModelBase
     public string Name => AppInfo.Name;
     public string AppId { get; }
 
+    /// <summary>
+    /// Background image for Medium/Large/Wide tiles. Null for Small tiles or apps without wide logos.
+    /// </summary>
+    public ImageSource? BackgroundImage => GetBackgroundImage();
+
+    /// <summary>True when the tile has a full-bleed background image (hides the small centered icon).</summary>
+    public bool HasBackgroundImage => BackgroundImage != null;
+
+    private ImageSource? GetBackgroundImage()
+    {
+        if (Size == TileSize.Small) return null;
+
+        var path = Size == TileSize.Wide && !string.IsNullOrEmpty(AppInfo.WideLogoPath)
+            ? AppInfo.WideLogoPath
+            : AppInfo.MediumLogoPath;
+
+        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
+
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.UriSource = new Uri(path, UriKind.Absolute);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch { return null; }
+    }
+
     public TileSize Size
     {
         get => _size;
@@ -24,6 +56,8 @@ public class TileViewModel : ViewModelBase
                 OnPropertyChanged(nameof(TileWidth));
                 OnPropertyChanged(nameof(TileHeight));
                 OnPropertyChanged(nameof(IconSize));
+                OnPropertyChanged(nameof(BackgroundImage));
+                OnPropertyChanged(nameof(HasBackgroundImage));
             }
         }
     }
