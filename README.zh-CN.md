@@ -67,6 +67,10 @@ dotnet run
 | 托盘 | WinForms `NotifyIcon` |
 | 持久化 | JSON (System.Text.Json) |
 
+## 作者
+
+**yhl10000** — [GitHub](https://github.com/yhl10000) · [邮箱](mailto:yhl10000@gmail.com)
+
 ## 许可证
 
 MIT

@@ -67,6 +67,10 @@ Changes take effect after restarting the app.
 | Tray | WinForms `NotifyIcon` |
 | Persistence | JSON (System.Text.Json) |
 
+## Author
+
+**yhl10000** — [GitHub](https://github.com/yhl10000) · [Email](mailto:yhl10000@gmail.com)
+
 ## License
 
 MIT

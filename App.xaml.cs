@@ -93,6 +93,8 @@ public partial class App : Application
         autoStartItem.CheckedChanged += (_, _) => SetAutoStart(autoStartItem.Checked);
         contextMenu.Items.Add(autoStartItem);
 
+        contextMenu.Items.Add("About", null, (_, _) =>
+            Dispatcher.Invoke(() => ShowAbout()));
         contextMenu.Items.Add(new WinForms.ToolStripSeparator());
         contextMenu.Items.Add("Exit", null, (_, _) =>
             Dispatcher.Invoke(Shutdown));
@@ -125,6 +127,32 @@ public partial class App : Application
         else
         {
             key.DeleteValue(AutoStartValueName, throwOnMissingValue: false);
+        }
+    }
+
+    private static void ShowAbout()
+    {
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
+        var ver = version != null ? $"{version.Major}.{version.Minor}.{version.Build}" : "1.0.0";
+
+        var result = MessageBox.Show(
+            $"WinXStart  v{ver}\n\n" +
+            "A lightweight Windows 10-style Start Menu.\n\n" +
+            "Author:  yhl10000\n" +
+            "Email:   yhl10000@gmail.com\n" +
+            "GitHub:  github.com/yhl10000/WinXStart\n\n" +
+            "Click OK to open the GitHub page.",
+            "About WinXStart",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Information);
+
+        if (result == MessageBoxResult.OK)
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://github.com/yhl10000/WinXStart",
+                UseShellExecute = true
+            });
         }
     }
 
