@@ -1,7 +1,10 @@
 # WinXStart
 
-A lightweight Windows 10‑style Start Menu replacement built with WPF.  
-Press **Win + Alt + Z** anywhere to bring up a gorgeous, fully customizable app launcher.
+[中文说明](README.zh-CN.md)
+
+Not a fan of the Windows 11 Start Menu? You're not alone.  
+**WinXStart** brings back the Windows 10‑style tiled Start Menu — lightweight, customizable, and built with WPF.  
+Press **Win + Alt + Z** anywhere to bring up a gorgeous app launcher.
 
 ![demo](assets/demo.png)
 
