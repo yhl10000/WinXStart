@@ -183,8 +183,7 @@ public class MainViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Cross-group move with live ObservableCollection mutation (no full refresh,
-    /// so WPF animations on the item containers remain smooth). Persists via PinManager.
+    /// Cross-group move with live ObservableCollection mutation. Persists via PinManager.
     /// </summary>
     public void MoveTileToGroupAt(TileViewModel tile, TileGroupViewModel sourceGroupVm,
                                    TileGroupViewModel targetGroupVm, int insertIndex)
@@ -201,6 +200,16 @@ public class MainViewModel : ViewModelBase
         targetGroupVm.Tiles.Insert(insertIndex, tile);
 
         _pinManager.MoveToGroup(tile.AppId, targetGroupVm.Name, insertIndex);
+        OnPropertyChanged(nameof(HasAnyTiles));
+    }
+
+    /// <summary>
+    /// Called after DragOver has already placed the tile in its final
+    /// ObservableCollection position. Persists that position to PinManager.
+    /// </summary>
+    public void PersistTilePosition(TileViewModel tile, TileGroupViewModel finalGroup, int finalIndex)
+    {
+        _pinManager.MoveToGroup(tile.AppId, finalGroup.Name, finalIndex);
         OnPropertyChanged(nameof(HasAnyTiles));
     }
 

@@ -6,6 +6,7 @@
         xmlns:conv="clr-namespace:WinXStart.Converters"
         xmlns:system="clr-namespace:System;assembly=mscorlib"
         xmlns:dd="urn:gong-wpf-dragdrop"
+        xmlns:b="http://schemas.microsoft.com/xaml/behaviors"
         Title="WinX Start"
         WindowStyle="None"
         AllowsTransparency="True"
@@ -24,6 +25,7 @@
         <system:Double x:Key="GroupFontSize">13</system:Double>
     </Window.Resources>
 
+    <Grid>
     <Border x:Name="RootBorder" CornerRadius="8"
             BorderThickness="1" BorderBrush="#66FFFFFF"
             Background="Transparent">
@@ -175,13 +177,15 @@
 
                                             <!-- Tiles in this group -->
                                             <ItemsControl ItemsSource="{Binding Tiles}"
-                                                          MinHeight="40"
+                                                          MinWidth="420"
+                                                          MinHeight="120"
                                                           dd:DragDrop.IsDragSource="True"
                                                           dd:DragDrop.IsDropTarget="True"
-                                                          dd:DragDrop.UseDefaultDragAdorner="True"
-                                                          dd:DragDrop.DefaultDragAdornerOpacity="0.7"
-                                                          dd:DragDrop.ShowAlwaysDropTargetAdorner="True"
-                                                          dd:DragDrop.DropHandler="{Binding DataContext.TileDropHandler, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                          dd:DragDrop.UseDefaultDragAdorner="False"
+                                                          dd:DragDrop.UseDefaultEffectDataTemplate="False"
+                                                          dd:DragDrop.ShowAlwaysDropTargetAdorner="False"
+                                                          dd:DragDrop.DropHandler="{Binding DataContext.TileDropHandler, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          dd:DragDrop.DragHandler="{Binding DataContext.TileDropHandler, RelativeSource={RelativeSource AncestorType=Window}}">
                                                 <ItemsControl.ItemsPanel>
                                                     <ItemsPanelTemplate>
                                                         <WrapPanel Orientation="Horizontal"/>
@@ -342,4 +346,15 @@
             </Border>
         </Grid>
     </Border>
+
+    <!-- Custom drag ghost: Popup follows mouse, centered on cursor -->
+    <Popup x:Name="DragGhostPopup"
+           Placement="Absolute"
+           AllowsTransparency="True"
+           IsHitTestVisible="False"
+           StaysOpen="True"
+           PopupAnimation="None">
+        <ContentPresenter x:Name="DragGhostContent"/>
+    </Popup>
+    </Grid>
 </Window>

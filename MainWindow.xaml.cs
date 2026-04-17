@@ -25,7 +25,151 @@ public partial class MainWindow : Window
         viewModel.RequestHide += HideMenu;
         viewModel.TileGroups.CollectionChanged += (_, _) => UpdateEmptyPlaceholder();
 
+        // ── Custom drag ghost: Popup centered on the cursor ──
+        // Gong's built-in ghost is disabled in XAML (UseDefaultDragAdorner=False,
+        // no DragAdornerTemplate). We render our own ghost via the DragGhostPopup
+        // defined in MainWindow.xaml and drive it from IDragSource callbacks.
+        viewModel.TileDropHandler.DragStarted += OnTileDragStarted;
+        viewModel.TileDropHandler.DragEnded   += OnTileDragEnded;
+        PreviewDragOver += OnWindowPreviewDragOver;
+
         ApplySettings();
+    }
+
+    // ── Custom drag ghost ────────────────────────────────────
+
+    private TileViewModel? _ghostTile;
+    // Cached per-drag to avoid VisualTreeHelper.GetDpi + allocations on every mousemove.
+    private double _dpiScaleX = 1.0;
+    private double _dpiScaleY = 1.0;
+    private double _ghostHalfW;
+    private double _ghostHalfH;
+    private int _lastPopupUpdateTick;
+
+    // Route E perf: images switched to LowQuality scaling during drag. Restore on end.
+    // Under AllowsTransparency=True the window is software-rendered (layered window);
+    // Fant/HighQuality scaling is CPU-expensive per frame. LowQuality = NearestNeighbor,
+    // barely noticeable on 32x32 icons that are already near source size.
+    private readonly List<System.Windows.Controls.Image> _scaledImagesDuringDrag = new();
+
+    private void OnTileDragStarted(TileViewModel tile)
+    {
+        _ghostTile = tile;
+        DragGhostContent.Content = BuildGhostVisual(tile);
+
+        var dpi = VisualTreeHelper.GetDpi(this);
+        _dpiScaleX = dpi.DpiScaleX;
+        _dpiScaleY = dpi.DpiScaleY;
+        _ghostHalfW = tile.TileWidth / 2.0;
+        _ghostHalfH = tile.TileHeight / 2.0;
+        _lastPopupUpdateTick = 0;
+
+        // ── Route E perf optimizations ──
+        // 1. BitmapCache the entire tile area so WPF rasterizes it once and blits on
+        //    subsequent frames instead of re-rendering the visual tree. This matters
+        //    under software rendering (AllowsTransparency=True).
+        GroupsControl.CacheMode = new BitmapCache { EnableClearType = false, SnapsToDevicePixels = true };
+
+        // 2. Downgrade all tile image scaling to LowQuality (NearestNeighbor) for the
+        //    duration of the drag. Fant/HighQuality filter is a CPU killer in layered windows.
+        _scaledImagesDuringDrag.Clear();
+        foreach (var img in FindVisualChildren<System.Windows.Controls.Image>(GroupsControl))
+        {
+            if (RenderOptions.GetBitmapScalingMode(img) == BitmapScalingMode.HighQuality)
+            {
+                RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.LowQuality);
+                _scaledImagesDuringDrag.Add(img);
+            }
+        }
+
+        DragGhostPopup.IsOpen = true;
+    }
+
+    private void OnTileDragEnded()
+    {
+        _ghostTile = null;
+        DragGhostPopup.IsOpen = false;
+        DragGhostContent.Content = null;
+
+        // Restore Route E perf state.
+        GroupsControl.CacheMode = null;
+        foreach (var img in _scaledImagesDuringDrag)
+            RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+        _scaledImagesDuringDrag.Clear();
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T t) yield return t;
+            foreach (var descendant in FindVisualChildren<T>(child))
+                yield return descendant;
+        }
+    }
+
+    private void OnWindowPreviewDragOver(object sender, DragEventArgs e)
+    {
+        if (!DragGhostPopup.IsOpen || _ghostTile == null) return;
+
+        // Throttle Popup repositioning to ~60fps. PreviewDragOver can fire several
+        // hundred times per second and each Popup.HorizontalOffset assignment
+        // forces a re-layout of the popup window — which is the main jank source.
+        int now = Environment.TickCount;
+        if (now - _lastPopupUpdateTick < 16) return;
+        _lastPopupUpdateTick = now;
+
+        var posInWindow = e.GetPosition(this);
+        var screenPos = PointToScreen(posInWindow);
+
+        // Center the ghost on the cursor. DPI scale cached at drag start.
+        DragGhostPopup.HorizontalOffset = screenPos.X / _dpiScaleX - _ghostHalfW;
+        DragGhostPopup.VerticalOffset   = screenPos.Y / _dpiScaleY - _ghostHalfH;
+    }
+
+    /// <summary>Builds a lightweight visual that mirrors the tile's appearance.</summary>
+    private static FrameworkElement BuildGhostVisual(TileViewModel tile)
+    {
+        // Outer border = a subtle 1px bright halo that implies "floating" without
+        // the cost of DropShadowEffect (which is a per-frame Gaussian blur and
+        // wrecks drag FPS as the ghost moves with the cursor).
+        var border = new Border
+        {
+            Width = tile.TileWidth,
+            Height = tile.TileHeight,
+            Background = tile.TileColor,
+            CornerRadius = new CornerRadius(2),
+            Opacity = 0.85,
+            BorderThickness = new Thickness(1),
+            BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(0xC0, 0xFF, 0xFF, 0xFF)),
+        };
+
+        var grid = new Grid { ClipToBounds = true };
+
+        if (tile.HasBackgroundImage && tile.BackgroundImage != null)
+        {
+            grid.Children.Add(new System.Windows.Controls.Image
+            {
+                Source = tile.BackgroundImage,
+                Stretch = System.Windows.Media.Stretch.UniformToFill
+            });
+        }
+
+        if (tile.Icon != null)
+        {
+            grid.Children.Add(new System.Windows.Controls.Image
+            {
+                Source = tile.Icon,
+                Width = 32, Height = 32,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center
+            });
+        }
+
+        border.Child = grid;
+        return border;
     }
 
     public void ShowMenu()
