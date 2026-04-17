@@ -11,10 +11,20 @@ public class AppInfo
     public string Category { get; set; } = "";
     public string ShortcutPath { get; set; } = "";
 
+    /// <summary>Application User Model ID for Store/UWP apps (launched via shell:AppsFolder).</summary>
+    public string AppUserModelId { get; set; } = "";
+
+    /// <summary>Direct path to a PNG/JPG icon file (used by Store apps).</summary>
+    public string IconImagePath { get; set; } = "";
+
+    public bool IsStoreApp => !string.IsNullOrEmpty(AppUserModelId);
+
     public string Id
     {
         get
         {
+            if (!string.IsNullOrEmpty(AppUserModelId))
+                return AppUserModelId.ToLowerInvariant();
             if (!string.IsNullOrEmpty(TargetPath))
                 return Path.GetFileNameWithoutExtension(TargetPath).ToLowerInvariant();
             return Name.ToLowerInvariant().Replace(" ", "_");

@@ -216,7 +216,22 @@ public class MainViewModel : ViewModelBase
     // Launch
     private void LaunchApp(AppInfo app)
     {
-        try { Process.Start(new ProcessStartInfo { FileName = app.TargetPath, Arguments = app.Arguments, UseShellExecute = true }); }
+        try
+        {
+            if (app.IsStoreApp)
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"shell:AppsFolder\\{app.AppUserModelId}",
+                    UseShellExecute = false
+                });
+            }
+            else
+            {
+                Process.Start(new ProcessStartInfo { FileName = app.TargetPath, Arguments = app.Arguments, UseShellExecute = true });
+            }
+        }
         catch
         {
             try { if (!string.IsNullOrEmpty(app.ShortcutPath)) Process.Start(new ProcessStartInfo { FileName = app.ShortcutPath, UseShellExecute = true }); }

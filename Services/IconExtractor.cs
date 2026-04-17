@@ -15,17 +15,42 @@ public class IconExtractor
 
     public ImageSource GetIcon(AppInfo app)
     {
-        var key = !string.IsNullOrEmpty(app.TargetPath) ? app.TargetPath : app.ShortcutPath;
+        var key = app.IsStoreApp
+            ? app.AppUserModelId
+            : (!string.IsNullOrEmpty(app.TargetPath) ? app.TargetPath : app.ShortcutPath);
 
         if (_cache.TryGetValue(key, out var cached))
             return cached;
 
-        var icon = ExtractFromFile(app.TargetPath)
+        var icon = ExtractFromImageFile(app.IconImagePath)
+                   ?? ExtractFromFile(app.TargetPath)
                    ?? ExtractFromFile(app.ShortcutPath)
                    ?? _defaultIcon.Value;
 
         _cache[key] = icon;
         return icon;
+    }
+
+    private static ImageSource? ExtractFromImageFile(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return null;
+
+        try
+        {
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.UriSource = new Uri(path, UriKind.Absolute);
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.DecodePixelWidth = 48;
+            bmp.EndInit();
+            bmp.Freeze();
+            return bmp;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static ImageSource? ExtractFromFile(string path)
