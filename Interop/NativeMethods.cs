@@ -43,6 +43,32 @@ internal static class NativeMethods
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
+    // Per-monitor DPI (Win 8.1+). Used so PositionWindow picks up the target monitor's
+    // DPI BEFORE the window is actually moved there — avoids a flicker where the window
+    // is sized with the old monitor's DPI, repositioned, then re-laid-out at the new DPI.
+    [DllImport("shcore.dll")]
+    public static extern int GetDpiForMonitor(IntPtr hmonitor, MonitorDpiType dpiType, out uint dpiX, out uint dpiY);
+
+    public enum MonitorDpiType
+    {
+        Effective = 0,
+        Angular   = 1,
+        Raw       = 2,
+    }
+
+    // Used to move the hidden HWND to the target monitor BEFORE Show(), so WPF's
+    // internal DPI context is correct when Left/Top/Width/Height are applied.
+    // Without this, cross-monitor shows flicker: the first UpdateLayeredWindow frame
+    // renders at the old DPI, then WM_DPICHANGED fires and WPF re-layouts at the new DPI.
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+
+    public const uint SWP_NOSIZE     = 0x0001;
+    public const uint SWP_NOZORDER   = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
+
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);

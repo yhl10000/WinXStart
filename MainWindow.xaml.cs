@@ -175,9 +175,42 @@ public partial class MainWindow : Window
     public void ShowMenu()
     {
         if (IsVisible) { HideMenu(); return; }
-        PositionWindow();
+
         _viewModel.SearchText = "";
+
+        // Phase 1: Move the hidden HWND onto the target monitor (in physical px)
+        // BEFORE Show(). WPF's DIP→physical conversion for Left/Top/Width/Height
+        // uses the HWND's "current monitor" DPI. If we leave it stuck on the
+        // previous monitor's DPI, PositionWindow()'s correctly-computed DIPs get
+        // multiplied by the wrong scale, producing a first frame at the wrong
+        // size/position; WM_DPICHANGED then fires and corrects it — visible flicker.
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero && NativeMethods.GetCursorPos(out var cursor))
+        {
+            var hMon = NativeMethods.MonitorFromPoint(cursor, NativeMethods.MONITOR_DEFAULTTONEAREST);
+            var mi = new NativeMethods.MONITORINFO
+            {
+                cbSize = System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>()
+            };
+            if (NativeMethods.GetMonitorInfo(hMon, ref mi))
+            {
+                int cx = (mi.rcWork.Left + mi.rcWork.Right) / 2;
+                int cy = (mi.rcWork.Top  + mi.rcWork.Bottom) / 2;
+                NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, cx, cy, 0, 0,
+                    NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOZORDER | NativeMethods.SWP_NOACTIVATE);
+            }
+        }
+
+        // Phase 2: Show at Opacity=0 so the first UpdateLayeredWindow frame (at
+        // potentially-stale DPI) is fully transparent. WM_DPICHANGED is sent via
+        // SendMessage (synchronous) during Show() — by the time Show() returns,
+        // WPF's internal DPI matches the target monitor.
+        Opacity = 0;
         Show();
+
+        // Phase 3: Now that WPF's DPI is correct, position in DIPs and reveal.
+        PositionWindow();
+        Opacity = 1;
         Activate();
         SearchBox.Focus();
         UpdateEmptyPlaceholder();
@@ -206,11 +239,30 @@ public partial class MainWindow : Window
             if (NativeMethods.GetMonitorInfo(monitor, ref info))
             {
                 var workArea = info.rcWork;
-                var dpi = VisualTreeHelper.GetDpi(this);
-                double screenW = (workArea.Right - workArea.Left) / dpi.DpiScaleX;
-                double screenH = (workArea.Bottom - workArea.Top) / dpi.DpiScaleY;
-                double screenLeft = workArea.Left / dpi.DpiScaleX;
-                double screenTop  = workArea.Top  / dpi.DpiScaleY;
+
+                // Use the TARGET monitor's DPI, not the window's current monitor DPI.
+                // VisualTreeHelper.GetDpi(this) returns DPI of the monitor the window is
+                // currently on — which is wrong on first show after a monitor switch.
+                // Using wrong DPI computes wrong size/position, then WPF's subsequent
+                // DPI-change relayout causes a visible flicker.
+                double dpiScaleX = 1.0, dpiScaleY = 1.0;
+                if (NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MonitorDpiType.Effective,
+                        out uint dpiX, out uint dpiY) == 0)
+                {
+                    dpiScaleX = dpiX / 96.0;
+                    dpiScaleY = dpiY / 96.0;
+                }
+                else
+                {
+                    var fallback = VisualTreeHelper.GetDpi(this);
+                    dpiScaleX = fallback.DpiScaleX;
+                    dpiScaleY = fallback.DpiScaleY;
+                }
+
+                double screenW = (workArea.Right - workArea.Left) / dpiScaleX;
+                double screenH = (workArea.Bottom - workArea.Top) / dpiScaleY;
+                double screenLeft = workArea.Left / dpiScaleX;
+                double screenTop  = workArea.Top  / dpiScaleY;
 
                 Width  = Math.Floor(screenW * ratio);
                 Height = Math.Floor(screenH * ratio);
