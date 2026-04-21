@@ -56,6 +56,35 @@ public partial class App : Application
             "WinX Start",
             "Press Win+Alt+Z to open the Start menu.\nRight-click this icon for options.",
             WinForms.ToolTipIcon.Info);
+
+        // Pre-warm the window surface: under AllowsTransparency=True WPF defers
+        // creating the layered window and first-frame render until Show() is called,
+        // which makes the first hotkey press feel sluggish (several seconds on cold
+        // start). Force that work to happen now at a low Dispatcher priority so
+        // startup itself still completes quickly.
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            if (_mainWindow == null) return;
+            // Render off-screen so the user never sees the pre-warm flash.
+            _mainWindow.WindowStartupLocation = WindowStartupLocation.Manual;
+            _mainWindow.Left = -32000;
+            _mainWindow.Top  = -32000;
+            _mainWindow.Opacity = 0;
+            _mainWindow.Show();
+            _mainWindow.Hide();
+            _mainWindow.Opacity = 1;
+        }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+
+        // Self-heal autostart registry value with current exe path on every launch
+        try
+        {
+            if (IsAutoStartEnabled())
+                SetAutoStart(true);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Autostart self-heal failed: {ex}");
+        }
     }
 
     private void SetupTrayIcon()
@@ -112,20 +141,32 @@ public partial class App : Application
         return key?.GetValue(AutoStartValueName) != null;
     }
 
-    private static void SetAutoStart(bool enable)
+    private void SetAutoStart(bool enable)
     {
-        using var key = Registry.CurrentUser.OpenSubKey(AutoStartRegKey, writable: true);
-        if (key == null) return;
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(AutoStartRegKey, writable: true)
+                             ?? Registry.CurrentUser.CreateSubKey(AutoStartRegKey);
+            if (key == null)
+                throw new InvalidOperationException("Cannot open Run key");
 
-        if (enable)
-        {
-            var exePath = Environment.ProcessPath;
-            if (!string.IsNullOrEmpty(exePath))
-                key.SetValue(AutoStartValueName, $"\"{exePath}\"");
+            if (enable)
+            {
+                var exePath = Environment.ProcessPath;
+                if (string.IsNullOrEmpty(exePath) || exePath.EndsWith("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+                    exePath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+                if (!string.IsNullOrEmpty(exePath))
+                    key.SetValue(AutoStartValueName, $"\"{exePath}\"");
+            }
+            else
+            {
+                key.DeleteValue(AutoStartValueName, throwOnMissingValue: false);
+            }
         }
-        else
+        catch (Exception ex)
         {
-            key.DeleteValue(AutoStartValueName, throwOnMissingValue: false);
+            System.Diagnostics.Debug.WriteLine($"SetAutoStart failed: {ex}");
+            _trayIcon?.ShowBalloonTip(3000, "WinXStart", $"Failed to update autostart setting: {ex.Message}", WinForms.ToolTipIcon.Warning);
         }
     }
 
