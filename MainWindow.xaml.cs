@@ -281,7 +281,10 @@ public partial class MainWindow : Window
         Top  = (area.Height - Height) / 2;
     }
 
-    private void Window_Deactivated(object sender, EventArgs e) => HideMenu();
+    private void Window_Deactivated(object sender, EventArgs e)
+    {
+        if (!ShellContextMenuHelper.IsOpen) HideMenu();
+    }
 
     private void ApplySettings()
     {
@@ -357,12 +360,6 @@ public partial class MainWindow : Window
     {
         if (sender is MenuItem mi && mi.DataContext is AppInfo app)
             _viewModel.PinCommand.Execute(app);
-    }
-
-    private void UnpinTile_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is MenuItem mi && mi.DataContext is TileViewModel tile)
-            _viewModel.UnpinCommand.Execute(tile);
     }
 
     private void OpenLocation_Click(object sender, RoutedEventArgs e)
@@ -489,92 +486,19 @@ public partial class MainWindow : Window
         }
     }
 
-    // ── Tile context menu: "Move to group" ───────────────────
+    // ── Tile native context menu ────────────────────────────
 
-    private void TileContextMenu_Opened(object sender, RoutedEventArgs e)
+    private void Tile_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not ContextMenu cm) return;
-        var tile = cm.Tag as TileViewModel
-                   ?? (cm.PlacementTarget as FrameworkElement)?.DataContext as TileViewModel;
-        if (tile == null) return;
+        e.Handled = true;
 
-        // Find the MoveToMenuItem inside this ContextMenu
-        MenuItem? moveToItem = null;
-        foreach (var item in cm.Items)
-        {
-            if (item is MenuItem mi && mi.Name == "MoveToMenuItem")
-            { moveToItem = mi; break; }
-        }
-        if (moveToItem == null) return;
+        if ((sender as FrameworkElement)?.DataContext is not TileViewModel tile)
+            return;
 
-        // Find which group this tile belongs to
-        var currentGroup = _viewModel.TileGroups
-            .FirstOrDefault(g => g.Tiles.Contains(tile));
+        var screenPoint = PointToScreen(e.GetPosition(this));
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
 
-        moveToItem.Items.Clear();
-
-        foreach (var group in _viewModel.TileGroups)
-        {
-            if (group == currentGroup) continue;
-            var item = MakeDarkMenuItem(group.Name);
-            var capturedGroup = group;
-            item.Click += (_, _) => _viewModel.MoveTileToGroup(tile, capturedGroup);
-            moveToItem.Items.Add(item);
-        }
-
-        // "New group..." option
-        if (moveToItem.Items.Count > 0)
-            moveToItem.Items.Add(new Separator());
-        var newGroupItem = MakeDarkMenuItem("New group...");
-        newGroupItem.Click += (_, _) =>
-        {
-            var name = PromptGroupName();
-            if (!string.IsNullOrWhiteSpace(name))
-                _viewModel.MoveTileToNewGroup(tile, name);
-        };
-        moveToItem.Items.Add(newGroupItem);
-
-        moveToItem.IsEnabled = moveToItem.Items.Count > 0;
-    }
-
-    /// Creates a MenuItem with explicit dark theme colors so it looks correct
-    /// inside dynamically-built submenus (which live in a separate popup visual tree
-    /// and don't inherit the Window's implicit styles).
-    private static MenuItem MakeDarkMenuItem(string header) => new()
-    {
-        Header = header,
-        Foreground = System.Windows.Media.Brushes.White,
-        Background = new System.Windows.Media.SolidColorBrush(
-            System.Windows.Media.Color.FromRgb(0x2D, 0x2D, 0x2D)),
-        Padding = new Thickness(8, 5, 8, 5)
-    };
-
-    private static string? PromptGroupName()
-    {
-        // Simple inline dialog via InputDialog window (re-use MessageBox pattern)
-        var dlg = new Window
-        {
-            Title = "New Group Name",
-            Width = 320, Height = 130,
-            WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            ResizeMode = ResizeMode.NoResize,
-            Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x28, 0x28, 0x28))
-        };
-        var tb = new TextBox { Margin = new Thickness(16, 16, 16, 8),
-                               Background = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x33,0x33,0x33)),
-                               Foreground = System.Windows.Media.Brushes.White,
-                               BorderBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x00,0x78,0xD4)),
-                               Padding = new Thickness(6,4,6,4), FontSize = 13 };
-        var ok = new System.Windows.Controls.Button { Content = "OK", Width = 70, Height = 26,
-                               HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
-                               Margin = new Thickness(0,0,16,12) };
-        ok.Click += (_, _) => dlg.DialogResult = true;
-        tb.KeyDown += (_, ke) => { if (ke.Key == Key.Enter) dlg.DialogResult = true; };
-        var sp = new StackPanel();
-        sp.Children.Add(tb);
-        sp.Children.Add(ok);
-        dlg.Content = sp;
-        dlg.Loaded += (_, _) => { tb.Focus(); };
-        return dlg.ShowDialog() == true ? tb.Text.Trim() : null;
+        ShellContextMenuHelper.ShowForTile(
+            hwnd, tile, screenPoint, _viewModel.TileGroups, _viewModel);
     }
 }

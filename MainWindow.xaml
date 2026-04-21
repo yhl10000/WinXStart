@@ -199,7 +199,8 @@
                                                                 Style="{StaticResource TileButtonStyle}"
                                                                 Command="{Binding DataContext.LaunchTileCommand,
                                                                     RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}">
+                                                                CommandParameter="{Binding}"
+                                                                MouseRightButtonUp="Tile_MouseRightButtonUp">
                                                             <Grid ClipToBounds="True">
                                                                 <!-- Full-bleed background image (Store apps with wide/medium logos) -->
                                                                 <Image Source="{Binding BackgroundImage}"
@@ -250,20 +251,7 @@
                                                                 </StackPanel>
                                                             </Grid>
 
-                                                            <Button.ContextMenu>
-                                                                <ContextMenu Opened="TileContextMenu_Opened"
-                                                                             Tag="{Binding}">
-                                                                    <MenuItem Header="Unpin from Start"
-                                                                              Click="UnpinTile_Click"/>
-                                                                    <Separator/>
-                                                                    <MenuItem Header="Resize">
-                                                                        <MenuItem Header="Small"  Command="{Binding ResizeSmallCommand}"/>
-                                                                        <MenuItem Header="Medium" Command="{Binding ResizeMediumCommand}"/>
-                                                                        <MenuItem Header="Large"  Command="{Binding ResizeLargeCommand}"/>
-                                                                    </MenuItem>
-                                                                    <MenuItem x:Name="MoveToMenuItem" Header="Move to group"/>
-                                                                </ContextMenu>
-                                                            </Button.ContextMenu>
+
                                                         </Button>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>

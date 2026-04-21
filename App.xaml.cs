@@ -217,4 +217,14 @@ public partial class App : Application
 
         base.OnExit(e);
     }
+
+    /// <summary>
+    /// Shows a balloon notification for errors. Called from Interop helpers that
+    /// don't have direct access to the tray icon.
+    /// </summary>
+    internal static void NotifyError(string message)
+    {
+        if (Current is App app && app._trayIcon != null)
+            app._trayIcon.ShowBalloonTip(3000, "WinXStart", message, WinForms.ToolTipIcon.Warning);
+    }
 }
