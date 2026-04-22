@@ -172,15 +172,16 @@ public class PinManager
 
     public void MoveToGroup(string appId, string targetGroupName, int insertIndex = -1)
     {
+        // Locate tile & source group
         PinnedTile? tile = null;
-        string? sourceGroupName = null;
+        TileGroup? sourceGroup = null;
         foreach (var g in _config.Groups)
         {
             var t = g.Tiles.FirstOrDefault(t =>
                 t.AppId.Equals(appId, StringComparison.OrdinalIgnoreCase));
-            if (t != null) { tile = t; sourceGroupName = g.Name; g.Tiles.Remove(t); break; }
+            if (t != null) { tile = t; sourceGroup = g; break; }
         }
-        if (tile == null) return;
+        if (tile == null || sourceGroup == null) return;
 
         var target = _config.Groups.FirstOrDefault(g =>
             g.Name.Equals(targetGroupName, StringComparison.OrdinalIgnoreCase));
@@ -189,22 +190,40 @@ public class PinManager
             target = new TileGroup { Name = targetGroupName };
             _config.Groups.Add(target);
         }
-        if (insertIndex >= 0 && insertIndex <= target.Tiles.Count)
-            target.Tiles.Insert(insertIndex, tile);
-        else
-            target.Tiles.Add(tile);
 
-        // Rebuild Order to match list position
-        for (int i = 0; i < target.Tiles.Count; i++)
-            target.Tiles[i].Order = i;
+        bool sameGroup = ReferenceEquals(sourceGroup, target);
 
-        // Only remove the SOURCE group if it became empty (not all empty groups)
-        if (sourceGroupName != null &&
-            !sourceGroupName.Equals(targetGroupName, StringComparison.OrdinalIgnoreCase))
+        // CRITICAL: operate on Order-sorted view (not list-physical order)
+        // because insertIndex is given in UI/Order coordinates, and list
+        // physical order may diverge from Order after prior Pin/Move operations.
+        if (sameGroup)
         {
-            _config.Groups.RemoveAll(g =>
-                g.Name.Equals(sourceGroupName, StringComparison.OrdinalIgnoreCase) &&
-                g.Tiles.Count == 0);
+            var sorted = target.Tiles.OrderBy(t => t.Order).ToList();
+            sorted.Remove(tile);
+            int idx = (insertIndex >= 0 && insertIndex <= sorted.Count) ? insertIndex : sorted.Count;
+            sorted.Insert(idx, tile);
+            for (int i = 0; i < sorted.Count; i++) sorted[i].Order = i;
+        }
+        else
+        {
+            // Remove from source, reindex source by Order to keep it consistent
+            sourceGroup.Tiles.Remove(tile);
+            var sourceSorted = sourceGroup.Tiles.OrderBy(t => t.Order).ToList();
+            for (int i = 0; i < sourceSorted.Count; i++) sourceSorted[i].Order = i;
+
+            // Insert into target at Order-coordinate insertIndex
+            var targetSorted = target.Tiles.OrderBy(t => t.Order).ToList();
+            int idx = (insertIndex >= 0 && insertIndex <= targetSorted.Count) ? insertIndex : targetSorted.Count;
+            targetSorted.Insert(idx, tile);
+            for (int i = 0; i < targetSorted.Count; i++) targetSorted[i].Order = i;
+
+            // Ensure tile is physically present in target.Tiles (was only removed from source)
+            if (!target.Tiles.Contains(tile))
+                target.Tiles.Add(tile);
+
+            // Remove source group if it became empty
+            if (sourceGroup.Tiles.Count == 0)
+                _config.Groups.Remove(sourceGroup);
         }
 
         if (_config.Groups.Count == 0)

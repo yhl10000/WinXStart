@@ -280,7 +280,39 @@ public class MainViewModel : ViewModelBase
 
     private void OnPin(object? param)
     {
-        if (param is AppInfo app) { _pinManager.Pin(app.Id); RefreshTileGroups(); }
+        if (param is not AppInfo app) return;
+
+        _pinManager.Pin(app.Id);
+
+        // Surgical UI update: append new tile to its group VM without
+        // rebuilding the entire TileGroups collection. Rebuilding would
+        // reset any in-memory-only ObservableCollection reorderings (from
+        // DragOver) that have already been persisted via MoveToGroup.
+        const string targetGroupName = "Pinned";
+        var groupVm = TileGroups.FirstOrDefault(g =>
+            g.Name.Equals(targetGroupName, StringComparison.OrdinalIgnoreCase));
+
+        if (groupVm == null)
+        {
+            // Group didn't exist in UI yet (first pin, or Pinned was deleted)
+            // -> fall back to a full refresh to materialize it.
+            RefreshTileGroups();
+            return;
+        }
+
+        // Skip if somehow already present (defensive)
+        if (groupVm.Tiles.Any(t => t.AppId.Equals(app.Id, StringComparison.OrdinalIgnoreCase)))
+        {
+            OnPropertyChanged(nameof(HasAnyTiles));
+            return;
+        }
+
+        var icon = _iconExtractor.GetIcon(app);
+        var tileVm = new TileViewModel(app, icon, TileSize.Medium);
+        tileVm.ResizeRequested += (appId, size) => _pinManager.ResizeTile(appId, size);
+        groupVm.Tiles.Add(tileVm);
+
+        OnPropertyChanged(nameof(HasAnyTiles));
     }
 
     private void OnUnpin(object? param)
