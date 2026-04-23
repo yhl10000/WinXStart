@@ -17,24 +17,67 @@ public class PinManager
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public PinManager()
+    /// <summary>
+    /// Default constructor: stores config under %UserProfile%\WinXStart\pins.json.
+    /// </summary>
+    public PinManager() : this(configDirOverride: null) { }
+
+    /// <summary>
+    /// Test/DI-friendly constructor. When <paramref name="configDirOverride"/> is non-null,
+    /// the config file lives there and the legacy-location migration is skipped.
+    /// </summary>
+    public PinManager(string? configDirOverride)
     {
-        var configDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            "WinXStart");
+        string configDir;
+        string? legacyPath = null;
+
+        if (configDirOverride != null)
+        {
+            configDir = configDirOverride;
+        }
+        else
+        {
+            configDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                "WinXStart");
+            legacyPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "WinXStart", "pins.json");
+        }
 
         Directory.CreateDirectory(configDir);
 
         _configPath = Path.Combine(configDir, "pins.json");
 
-        // Migrate from old location
-        var oldPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WinXStart", "pins.json");
-        if (!File.Exists(_configPath) && File.Exists(oldPath))
-            File.Move(oldPath, _configPath);
+        // Migrate from old location (production path only)
+        if (legacyPath != null && !File.Exists(_configPath) && File.Exists(legacyPath))
+            File.Move(legacyPath, _configPath);
 
         _config = Load();
+        NormalizeOrders();
+    }
+
+    /// <summary>
+    /// Rewrites every group's tile Order to a dense 0..N-1 sequence based on
+    /// current Order-sorted position. Fixes duplicates, gaps, and hand-edits.
+    /// Saves if any group needed normalization.
+    /// </summary>
+    private void NormalizeOrders()
+    {
+        bool dirty = false;
+        foreach (var group in _config.Groups)
+        {
+            var sorted = group.Tiles.OrderBy(t => t.Order).ToList();
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                if (sorted[i].Order != i)
+                {
+                    sorted[i].Order = i;
+                    dirty = true;
+                }
+            }
+        }
+        if (dirty) Save();
     }
 
     public UserConfig Config => _config;
@@ -79,11 +122,16 @@ public class PinManager
         if (group.Tiles.Any(t => t.AppId.Equals(appId, StringComparison.OrdinalIgnoreCase)))
             return;
 
+        // Use max(Order)+1, not group.Tiles.Count. Count is the physical list
+        // length, which can collide with an existing Order if earlier Unpin/Move
+        // operations left gaps or if the file was hand-edited.
+        int nextOrder = group.Tiles.Count == 0 ? 0 : group.Tiles.Max(t => t.Order) + 1;
+
         group.Tiles.Add(new PinnedTile
         {
             AppId = appId,
             Size = size,
-            Order = group.Tiles.Count
+            Order = nextOrder
         });
 
         Save();
@@ -93,8 +141,18 @@ public class PinManager
     {
         foreach (var group in _config.Groups)
         {
+            int before = group.Tiles.Count;
             group.Tiles.RemoveAll(t =>
                 t.AppId.Equals(appId, StringComparison.OrdinalIgnoreCase));
+
+            // Rewrite Order to close any gap left behind. Otherwise subsequent
+            // Pin() (which uses max+1) keeps growing Order unbounded, and future
+            // hand-edits or crash recovery see sparse Order values.
+            if (group.Tiles.Count != before)
+            {
+                var sorted = group.Tiles.OrderBy(t => t.Order).ToList();
+                for (int i = 0; i < sorted.Count; i++) sorted[i].Order = i;
+            }
         }
 
         _config.Groups.RemoveAll(g => g.Tiles.Count == 0);

@@ -181,7 +181,7 @@ public class AppScanner
     /// <summary>
     /// Returns false for GUID-like names, reverse-domain (com.xxx), and other system identifiers.
     /// </summary>
-    private static bool IsUserFriendlyName(string name)
+    internal static bool IsUserFriendlyName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
 

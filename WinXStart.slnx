@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/WinXStart.Tests/WinXStart.Tests.csproj" />
+  </Folder>
+  <Project Path="WinXStart.csproj" />
+</Solution>

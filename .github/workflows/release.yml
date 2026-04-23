@@ -30,10 +30,14 @@ jobs:
           echo "TAG=$tag" >> $env:GITHUB_OUTPUT
           echo "VER=$ver" >> $env:GITHUB_OUTPUT
 
+      # ── Run unit tests before publishing (block bad releases) ──
+      - name: Run tests
+        run: dotnet test WinXStart.slnx -c Release --nologo
+
       # ── Self-contained (single-file, trimmed) ──
       - name: Publish self-contained
         run: >
-          dotnet publish -c Release
+          dotnet publish WinXStart.csproj -c Release
           -r win-x64
           --self-contained true
           -p:PublishSingleFile=true
@@ -49,7 +53,7 @@ jobs:
       # ── Framework-dependent ──
       - name: Publish framework-dependent
         run: >
-          dotnet publish -c Release
+          dotnet publish WinXStart.csproj -c Release
           -r win-x64
           --self-contained false
           -o publish/framework-dependent

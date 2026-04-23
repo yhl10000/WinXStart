@@ -12,6 +12,20 @@
     <ApplicationIcon>assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <!--
+    Exclude the tests project tree. The test csproj lives under tests\ and the
+    main project would otherwise implicitly include tests\**\*.cs via SDK globs,
+    dragging xunit attributes into the WPF temp compile project.
+  -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+    <ApplicationDefinition Remove="tests\**" />
+    <Resource Remove="tests\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <Content Include="assets\app.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
