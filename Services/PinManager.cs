@@ -228,6 +228,52 @@ public class PinManager
         Save();
     }
 
+    /// <summary>
+    /// Authoritatively rewrite a group's tile Order to match the given AppId sequence.
+    /// Use this after a drag-reorder where the UI already has the final desired order:
+    /// the caller passes the VM/ObservableCollection's current sequence of AppIds, and
+    /// PinManager writes Order = index for each, so the on-disk state exactly mirrors
+    /// the UI. Tiles referenced in appIds but missing from the group are ignored.
+    /// Tiles present in the group but absent from appIds are appended at the end to
+    /// preserve data (should not happen in normal use).
+    /// </summary>
+    public void SyncGroupOrderFromList(string groupName, IReadOnlyList<string> appIds)
+    {
+        var group = _config.Groups.FirstOrDefault(g =>
+            g.Name.Equals(groupName, StringComparison.OrdinalIgnoreCase));
+        if (group == null) return;
+
+        var byId = group.Tiles.ToDictionary(
+            t => t.AppId,
+            t => t,
+            StringComparer.OrdinalIgnoreCase);
+
+        int order = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in appIds)
+        {
+            if (byId.TryGetValue(id, out var tile) && seen.Add(id))
+            {
+                tile.Order = order++;
+            }
+        }
+
+        // Safety: any tile not mentioned in appIds keeps a valid Order at the tail.
+        foreach (var tile in group.Tiles)
+        {
+            if (!seen.Contains(tile.AppId))
+                tile.Order = order++;
+        }
+
+        Save();
+    }
+
+    /// <summary>
+    /// Move a tile from its current group to <paramref name="targetGroupName"/>. When the
+    /// move is within the same group, prefer <see cref="SyncGroupOrderFromList"/> from the
+    /// UI layer because it avoids index-semantic mismatch between the ObservableCollection
+    /// physical index and PinManager's Order coordinates.
+    /// </summary>
     public void MoveToGroup(string appId, string targetGroupName, int insertIndex = -1)
     {
         // Locate tile & source group

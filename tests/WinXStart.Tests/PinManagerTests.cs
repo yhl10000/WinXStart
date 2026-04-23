@@ -434,4 +434,155 @@ public class PinManagerTests : IDisposable
         var persisted = File.ReadAllText(Path.Combine(_tempDir, "pins.json"));
         persisted.Should().Contain("\"order\": 0").And.NotContain("\"order\": 7");
     }
+
+    // ---------- Drag + Pin/Unpin integration (v1.3.3 regression) ----------
+    // These simulate the full TileDropHandler -> PersistTilePosition -> PinManager
+    // path, then follow with Pin/Unpin, which is what the user actually does.
+
+    [Fact]
+    public void DragReorder_then_Unpin_preserves_remaining_visual_order()
+    {
+        // Initial layout: a, b, c, d (Order 0..3)
+        var pm = NewManager();
+        pm.Pin("a"); pm.Pin("b"); pm.Pin("c"); pm.Pin("d");
+
+        // User drags "d" to the front. TileDropHandler.Drop eventually calls
+        // PinManager.MoveToGroup("d", "Pinned", 0) because DragOver already
+        // moved the ObservableCollection entry so IndexOf(d) == 0.
+        pm.MoveToGroup("d", "Pinned", 0);
+
+        // Expected visual order after drag: d, a, b, c
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("d", "a", "b", "c");
+
+        // User unpins "b"
+        pm.Unpin("b");
+
+        // Visual order must stay: d, a, c (b removed, others held position)
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("d", "a", "c");
+    }
+
+    [Fact]
+    public void DragReorder_survives_restart()
+    {
+        var pm = NewManager();
+        pm.Pin("a"); pm.Pin("b"); pm.Pin("c"); pm.Pin("d");
+        pm.MoveToGroup("c", "Pinned", 0); // c, a, b, d
+
+        // Reopen — simulates window close/reopen or app restart.
+        var pm2 = NewManager();
+        pm2.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("c", "a", "b", "d");
+    }
+
+    [Fact]
+    public void DragReorder_then_Pin_new_app_preserves_existing_order()
+    {
+        var pm = NewManager();
+        pm.Pin("a"); pm.Pin("b"); pm.Pin("c");
+        pm.MoveToGroup("c", "Pinned", 0); // c, a, b
+
+        pm.Pin("newguy"); // new tile goes to end
+
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("c", "a", "b", "newguy");
+    }
+
+    [Fact]
+    public void MultiStep_drag_sequence_within_same_group()
+    {
+        // Simulate a user making several drags without leaving the window.
+        var pm = NewManager();
+        foreach (var id in new[] { "a", "b", "c", "d", "e" }) pm.Pin(id);
+
+        // Drag e -> front
+        pm.MoveToGroup("e", "Pinned", 0); // e, a, b, c, d
+        // Drag a -> end
+        pm.MoveToGroup("a", "Pinned", 4); // e, b, c, d, a
+        // Drag c -> index 1
+        pm.MoveToGroup("c", "Pinned", 1); // e, c, b, d, a
+
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("e", "c", "b", "d", "a");
+    }
+
+    [Fact]
+    public void DragReorder_then_Unpin_another_group_does_not_affect_first_group()
+    {
+        var pm = NewManager();
+        pm.Pin("a"); pm.Pin("b"); pm.Pin("c");
+        pm.Pin("x", groupName: "Games");
+        pm.Pin("y", groupName: "Games");
+
+        pm.MoveToGroup("c", "Pinned", 0); // Pinned: c, a, b
+        pm.Unpin("x");                     // Games: y
+
+        pm.Groups.Single(g => g.Name == "Pinned").Tiles
+            .OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("c", "a", "b");
+    }
+
+    // ---------- SyncGroupOrderFromList (v1.3.3 new API) ----------
+
+    [Fact]
+    public void SyncGroupOrderFromList_rewrites_Order_to_match_sequence()
+    {
+        var pm = NewManager();
+        pm.Pin("a"); pm.Pin("b"); pm.Pin("c"); pm.Pin("d");
+
+        // Simulate UI having reordered the tiles to: d, b, a, c
+        pm.SyncGroupOrderFromList("Pinned", new[] { "d", "b", "a", "c" });
+
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("d", "b", "a", "c");
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.Order)
+            .Should().Equal(0, 1, 2, 3);
+    }
+
+    [Fact]
+    public void SyncGroupOrderFromList_is_case_insensitive_on_appId()
+    {
+        var pm = NewManager();
+        pm.Pin("Alpha"); pm.Pin("Beta");
+        pm.SyncGroupOrderFromList("Pinned", new[] { "BETA", "alpha" });
+        pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("Beta", "Alpha");
+    }
+
+    [Fact]
+    public void SyncGroupOrderFromList_unknown_group_is_noop()
+    {
+        var pm = NewManager();
+        pm.Pin("a");
+        Action act = () => pm.SyncGroupOrderFromList("DoesNotExist", new[] { "a" });
+        act.Should().NotThrow();
+    }
+
+    [Fact]
+    public void SyncGroupOrderFromList_tiles_missing_from_list_are_appended()
+    {
+        var pm = NewManager();
+        pm.Pin("a"); pm.Pin("b"); pm.Pin("c");
+        // Only mention two of three — the third should still survive at the tail.
+        pm.SyncGroupOrderFromList("Pinned", new[] { "c", "a" });
+
+        pm.Groups[0].Tiles.Should().HaveCount(3);
+        var orderedIds = pm.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId).ToList();
+        orderedIds[0].Should().Be("c");
+        orderedIds[1].Should().Be("a");
+        orderedIds[2].Should().Be("b");
+    }
+
+    [Fact]
+    public void SyncGroupOrderFromList_persists_across_instances()
+    {
+        var pm1 = NewManager();
+        pm1.Pin("a"); pm1.Pin("b"); pm1.Pin("c");
+        pm1.SyncGroupOrderFromList("Pinned", new[] { "c", "b", "a" });
+
+        var pm2 = NewManager();
+        pm2.Groups[0].Tiles.OrderBy(t => t.Order).Select(t => t.AppId)
+            .Should().Equal("c", "b", "a");
+    }
 }

@@ -207,9 +207,53 @@ public class MainViewModel : ViewModelBase
     /// Called after DragOver has already placed the tile in its final
     /// ObservableCollection position. Persists that position to PinManager.
     /// </summary>
+    /// <remarks>
+    /// Uses <see cref="PinManager.SyncGroupOrderFromList"/> to push the final
+    /// ObservableCollection sequence authoritatively down to PinManager. This avoids
+    /// any index-semantic mismatch between the physical ObservableCollection index
+    /// and PinManager's Order-sorted coordinate space. For cross-group drags, first
+    /// delegate to <see cref="PinManager.MoveToGroup"/> (which also removes the tile
+    /// from its original group in PinManager), then sync both affected group orders.
+    /// </remarks>
     public void PersistTilePosition(TileViewModel tile, TileGroupViewModel finalGroup, int finalIndex)
     {
-        _pinManager.MoveToGroup(tile.AppId, finalGroup.Name, finalIndex);
+        if (finalGroup == null) return;
+
+        // PinManager still knows the tile's original group (DragOver only mutated the
+        // ObservableCollection, not the on-disk state). Compare that to finalGroup.Name
+        // to decide whether this drop crosses groups from PinManager's perspective.
+        string? pmSourceGroupName = null;
+        foreach (var g in _pinManager.Groups)
+        {
+            if (g.Tiles.Any(t => t.AppId.Equals(tile.AppId, StringComparison.OrdinalIgnoreCase)))
+            {
+                pmSourceGroupName = g.Name;
+                break;
+            }
+        }
+
+        bool crossGroup = pmSourceGroupName != null &&
+                          !pmSourceGroupName.Equals(finalGroup.Name, StringComparison.OrdinalIgnoreCase);
+
+        if (crossGroup)
+        {
+            // Move the tile in the PinManager data model to the target group first,
+            // then sync both groups' Order to match the current UI sequences.
+            _pinManager.MoveToGroup(tile.AppId, finalGroup.Name, finalIndex);
+
+            var sourceGroupVm = TileGroups.FirstOrDefault(g =>
+                g.Name.Equals(pmSourceGroupName, StringComparison.OrdinalIgnoreCase));
+            if (sourceGroupVm != null)
+            {
+                var srcIds = sourceGroupVm.Tiles.Select(t => t.AppId).ToList();
+                _pinManager.SyncGroupOrderFromList(sourceGroupVm.Name, srcIds);
+            }
+        }
+
+        // Sync target group (also covers same-group drag).
+        var targetIds = finalGroup.Tiles.Select(t => t.AppId).ToList();
+        _pinManager.SyncGroupOrderFromList(finalGroup.Name, targetIds);
+
         OnPropertyChanged(nameof(HasAnyTiles));
     }
 
@@ -317,7 +361,43 @@ public class MainViewModel : ViewModelBase
 
     private void OnUnpin(object? param)
     {
-        if (param is TileViewModel tile) { _pinManager.Unpin(tile.AppId); RefreshTileGroups(); }
+        if (param is not TileViewModel tile) return;
+
+        _pinManager.Unpin(tile.AppId);
+
+        // Surgical UI update: remove the tile from its group VM and drop the
+        // group VM if it became empty and is not the default "Pinned" group.
+        // Rebuilding the whole TileGroups collection would wipe any in-memory
+        // ObservableCollection reorderings the user made via drag (which are
+        // already persisted to PinManager, but the rebuild would then re-sort
+        // by PinManager.Order — and if the sync path had any residual drift
+        // the user would see a "layout reverted" bug).
+        var owningGroup = TileGroups.FirstOrDefault(g => g.Tiles.Contains(tile));
+        if (owningGroup == null)
+        {
+            // Should not happen, but fall back to full rebuild for safety.
+            RefreshTileGroups();
+            return;
+        }
+
+        owningGroup.Tiles.Remove(tile);
+
+        // If the group is now empty and is not the default, remove its VM too —
+        // matching PinManager's behaviour (empty non-default groups are dropped).
+        if (owningGroup.Tiles.Count == 0 &&
+            !owningGroup.Name.Equals("Pinned", StringComparison.OrdinalIgnoreCase))
+        {
+            TileGroups.Remove(owningGroup);
+        }
+
+        // If Unpin emptied the last group, PinManager re-seeded a "Pinned" group.
+        // Make sure the UI reflects that, otherwise the empty state won't render.
+        if (TileGroups.Count == 0)
+        {
+            RefreshTileGroups();
+        }
+
+        OnPropertyChanged(nameof(HasAnyTiles));
     }
 
     /// <summary>
